@@ -1,0 +1,51 @@
+- generic [ref=e1]:
+  - alert [ref=e2]
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - link "Visit The Church of Jesus Christ of Latter-day Saints Home Page" [ref=e7] [cursor=pointer]:
+          - /url: https://www.churchofjesuschrist.org/?lang=eng
+        - generic [ref=e8]: Visit The Church of Jesus Christ of Latter-day Saints Home Page
+      - button "Select language" [ref=e11] [cursor=pointer]:
+        - generic [ref=e14]: English
+  - main [ref=e15]:
+    - generic [ref=e17]:
+      - generic [ref=e18]:
+        - heading "Sign In" [level=1] [ref=e20]
+        - generic [ref=e21]:
+          - generic [ref=e23]:
+            - generic [ref=e27]:
+              - generic [ref=e29]: Username
+              - textbox "Sign in to your church account by entering your username" [active] [ref=e31]
+              - generic [ref=e32]: Sign in to your church account by entering your username
+            - button "Next" [disabled] [ref=e34]
+          - generic [ref=e35]:
+            - text: By proceeding to login I agree to the
+            - link "Read Terms of Use" [ref=e36] [cursor=pointer]:
+              - /url: https://www.churchofjesuschrist.org/legal/terms-of-use?lang=eng&country=go
+              - text: Terms of Use (Updated 2021-04-13)
+            - text: and have read the
+            - link "Read Privacy Notice" [ref=e37] [cursor=pointer]:
+              - /url: https://www.churchofjesuschrist.org/legal/privacy-notice?lang=eng&country=go
+              - text: Privacy Notice (Updated 2021-04-06)
+            - text: .
+          - generic [ref=e38]:
+            - link "Create a new account" [ref=e39] [cursor=pointer]
+            - button "Can't sign in?" [ref=e40] [cursor=pointer]
+      - button "Sign In Feedback" [ref=e43] [cursor=pointer]: Feedback
+  - contentinfo "Footer" [ref=e44]:
+    - link "Visit The Church of Jesus Christ of Latter-day Saints Home Page" [ref=e46] [cursor=pointer]:
+      - /url: https://www.churchofjesuschrist.org/?lang=eng
+      - generic [ref=e47]:
+        - img "Visit The Church of Jesus Christ of Latter-day Saints Home Page" [ref=e48]
+        - img "Visit The Church of Jesus Christ of Latter-day Saints Home Page" [ref=e50]
+    - generic [ref=e51]:
+      - paragraph [ref=e52]:
+        - link "Accessibility Support" [ref=e53] [cursor=pointer]:
+          - /url: https://www.churchofjesuschrist.org/study/life-help/disabilities?lang=eng
+      - paragraph [ref=e54]:
+        - link "Terms of Use (Updated 2021-04-13)" [ref=e55] [cursor=pointer]:
+          - /url: https://www.churchofjesuschrist.org/services/platform/v4/resources/terms-of-use?lang=eng
+        - link "Privacy Notice (Updated 2021-04-06)" [ref=e56] [cursor=pointer]:
+          - /url: https://www.churchofjesuschrist.org/services/platform/v4/resources/privacy-policy?eng
+      - paragraph [ref=e57]: © 2026 by Intellectual Reserve, Inc. All rights reserved.

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx playwright test tests/mygatheringhelpsupportticket.zerostep.spec.ts --headed)",
+      "Bash(npx playwright test tests/mygatheringhelpsupportticket.hybrid.spec.ts)",
+      "WebSearch",
+      "Bash(npm test -- tests/mygatheringhelpsupportticket.zerostep.spec.ts)",
+      "Bash(npm list alumnium)",
+      "Bash(npm info alumnium)",
+      "Bash(node -e \"const {Alumni} = require\\(''alumnium''\\); const a = new Alumni\\({}\\); console.log\\(Object.getOwnPropertyNames\\(Alumni.prototype\\).filter\\(m => m !== ''constructor''\\)\\)\")"
+    ]
+  }
+}

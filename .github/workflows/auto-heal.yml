@@ -1,0 +1,190 @@
+name: Auto-Heal on Test Failure
+
+# This workflow triggers AFTER the main Playwright test workflow fails.
+# It collects failure details and creates a GitHub Issue with diagnostics.
+# If Copilot coding agent is enabled, assign the issue to Copilot
+# and it will use the @playwright-test-healer agent to investigate.
+
+on:
+  workflow_run:
+    workflows: ["Playwright Tests"]
+    types:
+      - completed
+
+permissions:
+  issues: write
+  actions: read
+  contents: read
+
+jobs:
+  diagnose-and-heal:
+    # Only run when the test workflow actually failed
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 2
+
+      - name: Download test report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Analyze failure type
+        id: analyze
+        run: |
+          echo "## Failure Analysis" > failure-analysis.md
+          echo "" >> failure-analysis.md
+          echo "**Branch:** ${{ github.event.workflow_run.head_branch }}" >> failure-analysis.md
+          echo "**Commit:** ${{ github.event.workflow_run.head_sha }}" >> failure-analysis.md
+          echo "**Run:** ${{ github.event.workflow_run.html_url }}" >> failure-analysis.md
+          echo "" >> failure-analysis.md
+
+          # Check what files changed in the last commit on this branch
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "unknown")
+          echo "**Changed files in last commit:**" >> failure-analysis.md
+          echo '```' >> failure-analysis.md
+          echo "$CHANGED_FILES" >> failure-analysis.md
+          echo '```' >> failure-analysis.md
+          echo "" >> failure-analysis.md
+
+          # Determine likely failure category
+          TEST_FILES_CHANGED=false
+          APP_FILES_CHANGED=false
+          CONFIG_FILES_CHANGED=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              tests/*|*.spec.ts|*.spec.js)
+                TEST_FILES_CHANGED=true
+                ;;
+              playwright.config.*|package.json|package-lock.json|.github/workflows/*)
+                CONFIG_FILES_CHANGED=true
+                ;;
+              *)
+                APP_FILES_CHANGED=true
+                ;;
+            esac
+          done <<< "$CHANGED_FILES"
+
+          # Build the diagnosis
+          if [ "$TEST_FILES_CHANGED" = true ] && [ "$APP_FILES_CHANGED" = false ]; then
+            CATEGORY="TEST_ISSUE"
+            echo "### Likely Cause: Test Code Issue" >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "Only test files were changed. This is likely a problem with the test itself:" >> failure-analysis.md
+            echo "a broken selector, timing issue, or incorrect assertion." >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "**Recommended action:** The @playwright-test-healer agent can fix this." >> failure-analysis.md
+          elif [ "$APP_FILES_CHANGED" = true ] && [ "$TEST_FILES_CHANGED" = false ]; then
+            CATEGORY="APP_ISSUE"
+            echo "### Likely Cause: Application Change Broke Tests" >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "Application files were changed but test files were not." >> failure-analysis.md
+            echo "This suggests a **real regression** — the app behavior changed and tests caught it." >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "**Recommended action:** A human should review this. Do NOT auto-fix the tests." >> failure-analysis.md
+            echo "The tests are doing their job by catching a breaking change." >> failure-analysis.md
+          elif [ "$APP_FILES_CHANGED" = true ] && [ "$TEST_FILES_CHANGED" = true ]; then
+            CATEGORY="MIXED"
+            echo "### Likely Cause: Mixed Changes" >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "Both application and test files were changed." >> failure-analysis.md
+            echo "This needs human review to determine if the tests need updating" >> failure-analysis.md
+            echo "to match new app behavior, or if something is actually broken." >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "**Recommended action:** Human review first, then optionally use @playwright-test-healer." >> failure-analysis.md
+          elif [ "$CONFIG_FILES_CHANGED" = true ]; then
+            CATEGORY="CONFIG_ISSUE"
+            echo "### Likely Cause: Configuration Change" >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "Config or pipeline files were changed. Failure may be due to:" >> failure-analysis.md
+            echo "dependency updates, config changes, or CI environment issues." >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "**Recommended action:** Check the pipeline logs and config diff." >> failure-analysis.md
+          else
+            CATEGORY="UNKNOWN"
+            echo "### Unable to Determine Cause" >> failure-analysis.md
+            echo "" >> failure-analysis.md
+            echo "Could not determine which files changed. Manual investigation needed." >> failure-analysis.md
+          fi
+
+          echo "category=$CATEGORY" >> $GITHUB_OUTPUT
+
+          # If the report was downloaded, try to extract failure details
+          if [ -d "playwright-report" ]; then
+            echo "" >> failure-analysis.md
+            echo "### Test Report" >> failure-analysis.md
+            echo "The Playwright HTML report is available as an artifact on the [failed run](${{ github.event.workflow_run.html_url }})." >> failure-analysis.md
+          fi
+
+          cat failure-analysis.md
+
+      - name: Create issue for test failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const analysis = fs.readFileSync('failure-analysis.md', 'utf8');
+            const category = '${{ steps.analyze.outputs.category }}';
+            const branch = '${{ github.event.workflow_run.head_branch }}';
+
+            // Set labels based on failure category
+            const labels = ['test-failure', 'automated'];
+            if (category === 'TEST_ISSUE') labels.push('test-fix-needed');
+            if (category === 'APP_ISSUE') labels.push('regression', 'needs-human-review');
+            if (category === 'MIXED') labels.push('needs-human-review');
+            if (category === 'CONFIG_ISSUE') labels.push('config');
+
+            // Build the issue title
+            const emoji = {
+              'TEST_ISSUE': '🔧',
+              'APP_ISSUE': '🚨',
+              'MIXED': '⚠️',
+              'CONFIG_ISSUE': '⚙️',
+              'UNKNOWN': '❓'
+            };
+            const title = `${emoji[category] || '❓'} Playwright tests failed on \`${branch}\``;
+
+            // Build the issue body
+            let body = analysis;
+            body += '\n\n---\n';
+            body += '### For Copilot Coding Agent\n\n';
+
+            if (category === 'TEST_ISSUE') {
+              body += 'Use the `@playwright-test-healer` agent to diagnose and fix this failure.\n';
+              body += 'The test code has an issue — the application did not change.\n';
+              body += '\n**Steps:**\n';
+              body += '1. Read the failing test file\n';
+              body += '2. Run the test to reproduce: `npx playwright test --reporter=list`\n';
+              body += '3. Analyze the error output\n';
+              body += '4. Fix the test\n';
+              body += '5. Run it again to verify: `npx playwright test --repeat-each=2`\n';
+            } else if (category === 'APP_ISSUE') {
+              body += '⛔ **Do NOT auto-fix this.** The tests caught a real regression.\n';
+              body += 'A human needs to review whether the application change was intentional.\n';
+              body += 'If it was intentional, the tests should be updated to match new behavior.\n';
+              body += 'If it was not intentional, the application code should be reverted or fixed.\n';
+            } else {
+              body += 'This failure needs human review before any automated fix is attempted.\n';
+            }
+
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: labels,
+              // Uncomment the line below to auto-assign to Copilot:
+              assignees: ['copilot']
+            });
+
+            console.log(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
