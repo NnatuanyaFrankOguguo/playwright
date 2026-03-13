@@ -182,9 +182,21 @@ jobs:
               repo: context.repo.repo,
               title: title,
               body: body,
-              labels: labels,
-              // Uncomment the line below to auto-assign to Copilot:
-              assignees: ['copilot']
+              labels: labels
             });
 
             console.log(`Created issue #${issue.data.number}: ${issue.data.html_url}`);
+
+            // Try to assign Copilot, but do not fail the workflow if assignment is not allowed.
+            try {
+              await github.rest.issues.addAssignees({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.data.number,
+                assignees: ['copilot']
+              });
+              console.log('Assigned issue to copilot');
+            } catch (error) {
+              console.log(`Could not assign issue to copilot: ${error.message}`);
+              core.warning('Issue created successfully, but assignment to copilot failed.');
+            }
