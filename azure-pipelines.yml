@@ -2,9 +2,11 @@ trigger:
   - main          # Run pipeline when code is pushed to 'main'
 
 pool:
-  vmImage: 'ubuntu-latest'   # Use a Microsoft-hosted agent
+  name: 'my-local-agent'   # Use a Microsoft-hosted agent
 
 steps:
+  - script: echo "Hello from my self-hosted agent!"
+    displayName: 'Test step'
   - task: NodeTool@0
     inputs:
       versionSpec: '18.x'
