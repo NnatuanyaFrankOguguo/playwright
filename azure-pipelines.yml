@@ -1,0 +1,72 @@
+# azure-pipelines.yml
+
+trigger:
+  branches:
+    include:
+      - main        # triggers pipeline when you push to main
+
+pr:
+  branches:
+    include:
+      - main        # also triggers on pull requests to main
+
+pool:
+  vmImage: ubuntu-latest   # use a Linux agent (Playwright works great here)
+
+variables:
+  NODE_VERSION: '18.x'
+
+stages:
+  - stage: Test
+    displayName: 'Playwright Tests'
+    jobs:
+      - job: RunTests
+        displayName: 'Run Playwright Tests'
+        timeoutInMinutes: 60
+
+        steps:
+          # Step 1 - Setup Node.js
+          - task: NodeTool@0
+            displayName: 'Install Node.js'
+            inputs:
+              versionSpec: $(NODE_VERSION)
+
+          # Step 2 - Install dependencies
+          - script: npm ci
+            displayName: 'Install npm dependencies'
+
+          # Step 3 - Install Playwright browsers + system deps
+          - script: npx playwright install --with-deps
+            displayName: 'Install Playwright browsers'
+
+          # Step 4 - Run the tests
+          - script: npx playwright test
+            displayName: 'Run Playwright Tests'
+            continueOnError: true   # pipeline continues even if tests fail, so reports still publish
+
+          # Step 5 - Publish JUnit test results to Azure Pipelines
+          - task: PublishTestResults@2
+            displayName: 'Publish Test Results'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: 'test-results/results.xml'
+              testRunTitle: 'Playwright Test Results'
+            condition: always()     # always runs even if tests fail
+
+          # Step 6 - Publish HTML report as pipeline artifact
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Playwright HTML Report'
+            inputs:
+              targetPath: 'playwright-report'
+              artifact: 'playwright-report'
+              publishLocation: 'pipeline'
+            condition: always()
+
+          # Step 7 - Publish videos/screenshots on failure
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish Test Attachments'
+            inputs:
+              targetPath: 'test-results'
+              artifact: 'test-attachments'
+              publishLocation: 'pipeline'
+            condition: always()
