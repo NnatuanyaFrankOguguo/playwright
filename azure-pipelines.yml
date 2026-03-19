@@ -43,6 +43,9 @@ stages:
           - script: npx playwright test
             displayName: 'Run Playwright Tests'
             continueOnError: true   # pipeline continues even if tests fail, so reports still publish
+            env:
+              CHURCH_PASSWORD: $(CHURCH_PASSWORD)
+              CHURCH_USERNAME: $(CHURCH_USERNAME)
 
           # Step 5 - Publish JUnit test results to Azure Pipelines
           - task: PublishTestResults@2
