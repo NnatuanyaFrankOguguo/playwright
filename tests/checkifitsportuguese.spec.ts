@@ -20,7 +20,7 @@ test('test', async ({ page }) => {
   await page.getByRole('link', { name: 'Português (Brasil)' }).click();
 
   await expect(page.getByLabel('Text Home Press enter to edit')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'English' })).toBeVisible();
-  //await expect(page.getByRole('link', { name: 'Português (Brasil)' })).toBeVisible();
+  //await expect(page.getByRole('link', { name: 'English' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Português (Brasil)' })).toBeVisible();
 
 });
