@@ -11,7 +11,7 @@ pr:
       - main        # also triggers on pull requests to main
 
 pool:
-  vmImage: 'my-local-agent'   # use a Linux agent (Playwright works great here)
+  name: 'my-local-agent'   # use a Linux agent (Playwright works great here)
 
 variables:
   NODE_VERSION: '18.x'
