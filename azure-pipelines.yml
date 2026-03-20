@@ -75,73 +75,11 @@ stages:
             displayName: 'Install Playwright browsers'
 
           # Step 4 - Detect changed test files (only in auto mode)
-          - ${{ if eq(parameters.runMode, 'auto') }}:
-            - checkout: self
-              fetchDepth: 0
-              displayName: 'Fetch full git history'
+          #- ${{ if eq(parameters.runMode, 'auto') }}:
+          #  - checkout: self
+          #    fetchDepth: 0
+          #    displayName: 'Fetch full git history'
 
-          - ${{ if eq(parameters.runMode, 'auto') }}:
-            - powershell: |
-                # Get the target branch (main) for comparison
-                $targetBranch = "origin/main"
-                
-                # For pushes directly to main, compare with previous commit
-                $currentBranch = git rev-parse --abbrev-ref HEAD
-                if ($currentBranch -eq "main") {
-                  $changedFiles = git diff --name-only HEAD~1 HEAD 2>$null
-                } else {
-                  # For PRs, compare against main
-                  $changedFiles = git diff --name-only $targetBranch...HEAD 2>$null
-                }
-
-                if (-not $changedFiles) {
-                  Write-Host "Could not detect changes. Falling back to run all tests."
-                  Write-Host "##vso[task.setvariable variable=TEST_FILES]"
-                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]fallback"
-                  exit 0
-                }
-
-                # Filter for only .spec.ts and .spec.js test files
-                $testFiles = $changedFiles | Where-Object { $_ -match '\.spec\.(ts|js)$' }
-
-                if ($testFiles) {
-                  $fileList = ($testFiles -join ' ')
-                  Write-Host "Changed test files found:"
-                  Write-Host $fileList
-                  Write-Host "##vso[task.setvariable variable=TEST_FILES]$fileList"
-                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]true"
-                } else {
-                  Write-Host "No test files were changed in this push."
-                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]false"
-                }
-              displayName: 'Detect changed test files'
-
-          # ---- AUTO MODE: Run only changed test files ----
-          - ${{ if eq(parameters.runMode, 'auto') }}:
-            - script: npx playwright test $(TEST_FILES)
-              displayName: 'Run changed tests only'
-              condition: eq(variables.HAS_TEST_CHANGES, 'true')
-              continueOnError: true
-              env:
-                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
-                CHURCH_USERNAME: $(CHURCH_USERNAME)
-
-          # ---- AUTO MODE: Fallback - run all tests if detection failed ----
-          - ${{ if eq(parameters.runMode, 'auto') }}:
-            - script: npx playwright test
-              displayName: 'Run all tests (fallback)'
-              condition: eq(variables.HAS_TEST_CHANGES, 'fallback')
-              continueOnError: true
-              env:
-                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
-                CHURCH_USERNAME: $(CHURCH_USERNAME)
-
-          - ${{ if eq(parameters.runMode, 'auto') }}:
-            - powershell: |
-                Write-Host "No test files were modified. Skipping test run."
-                Write-Host "If you want to run all tests, use Run Pipeline manually and set Run Mode to 'all'."
-              displayName: 'Skip - no test changes detected'
-              condition: eq(variables.HAS_TEST_CHANGES, 'false')
 
           # ---- ALL MODE: Run everything ----
           - ${{ if eq(parameters.runMode, 'all') }}:
