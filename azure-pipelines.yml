@@ -3,15 +3,50 @@
 trigger:
   branches:
     include:
-      - main        # triggers pipeline when you push to main
+      - main
 
 pr:
   branches:
     include:
-      - main        # also triggers on pull requests to main
+      - main
+
+parameters:
+  - name: runMode
+    displayName: 'Run Mode'
+    type: string
+    default: 'auto'
+    values:
+      - auto
+      - all
+      - suite
+      - tag
+
+  - name: testSuite
+    displayName: 'Test Suite - folder (only used when Run Mode = suite)'
+    type: string
+    default: 'none'
+    values:
+      - none
+      - auth
+      - dashboard
+      - portuguese
+      # Add more folders as you create them
+
+  - name: testTag
+    displayName: 'Test Tag (only used when Run Mode = tag)'
+    type: string
+    default: 'none'
+    values:
+      - none
+      - '@smoke'
+      - '@auth'
+      - '@dashboard'
+      - '@portuguese'
+      - '@regression'
+      # Add more tags as you create them
 
 pool:
-  name: 'my-local-agent'   # use a Linux agent (Playwright works great here)
+  name: 'my-local-agent'
 
 variables:
   NODE_VERSION: '18.x'
@@ -35,28 +70,85 @@ stages:
           - script: npm ci
             displayName: 'Install npm dependencies'
 
-          # Step 3 - Install Playwright browsers + system deps
+          # Step 3 - Install Playwright browsers
           - script: npx playwright install --with-deps
             displayName: 'Install Playwright browsers'
 
-          # Step 4 - Run the tests
-          - script: npx playwright test
-            displayName: 'Run Playwright Tests'
-            continueOnError: true   # pipeline continues even if tests fail, so reports still publish
-            env:
-              CHURCH_PASSWORD: $(CHURCH_PASSWORD)
-              CHURCH_USERNAME: $(CHURCH_USERNAME)
+          # Step 4 - Detect changed test files (only in auto mode)
+          - ${{ if eq(parameters.runMode, 'auto') }}:
+            - powershell: |
+                # Get changed files between this commit and the previous one
+                $changedFiles = git diff --name-only HEAD~1 HEAD
 
-          # Step 5 - Publish JUnit test results to Azure Pipelines
+                # Filter for only .spec.ts and .spec.js test files
+                $testFiles = $changedFiles | Where-Object { $_ -match '\.spec\.(ts|js)$' }
+
+                if ($testFiles) {
+                  $fileList = ($testFiles -join ' ')
+                  Write-Host "Changed test files found:"
+                  Write-Host $fileList
+                  Write-Host "##vso[task.setvariable variable=TEST_FILES]$fileList"
+                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]true"
+                } else {
+                  Write-Host "No test files were changed in this push."
+                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]false"
+                }
+              displayName: 'Detect changed test files'
+
+          # ---- AUTO MODE: Run only changed test files ----
+          - ${{ if eq(parameters.runMode, 'auto') }}:
+            - script: npx playwright test $(TEST_FILES)
+              displayName: 'Run changed tests only'
+              condition: eq(variables.HAS_TEST_CHANGES, 'true')
+              continueOnError: true
+              env:
+                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
+                CHURCH_USERNAME: $(CHURCH_USERNAME)
+
+          - ${{ if eq(parameters.runMode, 'auto') }}:
+            - powershell: |
+                Write-Host "No test files were modified. Skipping test run."
+                Write-Host "If you want to run all tests, use Run Pipeline manually and set Run Mode to 'all'."
+              displayName: 'Skip - no test changes detected'
+              condition: ne(variables.HAS_TEST_CHANGES, 'true')
+
+          # ---- ALL MODE: Run everything ----
+          - ${{ if eq(parameters.runMode, 'all') }}:
+            - script: npx playwright test
+              displayName: 'Run All Tests'
+              continueOnError: true
+              env:
+                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
+                CHURCH_USERNAME: $(CHURCH_USERNAME)
+
+          # ---- SUITE MODE: Run by folder ----
+          - ${{ if eq(parameters.runMode, 'suite') }}:
+            - script: npx playwright test tests/${{ parameters.testSuite }}/
+              displayName: 'Run ${{ parameters.testSuite }} suite'
+              continueOnError: true
+              env:
+                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
+                CHURCH_USERNAME: $(CHURCH_USERNAME)
+
+          # ---- TAG MODE: Run by tag ----
+          - ${{ if eq(parameters.runMode, 'tag') }}:
+            - script: npx playwright test --grep "${{ parameters.testTag }}"
+              displayName: 'Run tests tagged ${{ parameters.testTag }}'
+              continueOnError: true
+              env:
+                CHURCH_PASSWORD: $(CHURCH_PASSWORD)
+                CHURCH_USERNAME: $(CHURCH_USERNAME)
+
+          # Step 5 - Publish JUnit test results
           - task: PublishTestResults@2
             displayName: 'Publish Test Results'
             inputs:
               testResultsFormat: 'JUnit'
               testResultsFiles: 'test-results/results.xml'
               testRunTitle: 'Playwright Test Results'
-            condition: always()     # always runs even if tests fail
+            condition: always()
 
-          # Step 6 - Publish HTML report as pipeline artifact
+          # Step 6 - Publish HTML report
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Playwright HTML Report'
             inputs:
@@ -65,7 +157,7 @@ stages:
               publishLocation: 'pipeline'
             condition: always()
 
-          # Step 7 - Publish videos/screenshots on failure
+          # Step 7 - Publish videos/screenshots
           - task: PublishPipelineArtifact@1
             displayName: 'Publish Test Attachments'
             inputs:
