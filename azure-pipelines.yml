@@ -82,37 +82,53 @@ stages:
 
           - ${{ if eq(parameters.runMode, 'auto') }}:
             - powershell: |
-                # Get the target branch (main) for comparison
-                $targetBranch = "origin/main"
+                $ErrorActionPreference = "Continue"
                 
-                # For pushes directly to main, compare with previous commit
-                $currentBranch = git rev-parse --abbrev-ref HEAD
-                if ($currentBranch -eq "main") {
-                  $changedFiles = git diff --name-only HEAD~1 HEAD 2>$null
-                } else {
-                  # For PRs, compare against main
-                  $changedFiles = git diff --name-only $targetBranch...HEAD 2>$null
+                # Try comparing with previous commit first
+                $changedFiles = $null
+                
+                try {
+                  # Get the list of commits to see if HEAD~1 exists
+                  $commitCount = git rev-list --count HEAD 2>$null
+                  
+                  if ($commitCount -gt 1) {
+                    $changedFiles = git diff --name-only HEAD~1 HEAD
+                    Write-Host "Compared with previous commit (HEAD~1)"
+                  } else {
+                    # First commit in repo, list all files
+                    $changedFiles = git ls-tree -r --name-only HEAD
+                    Write-Host "First commit detected, listing all files"
+                  }
+                } catch {
+                  Write-Host "Git diff failed, trying alternative method..."
+                  
+                  # Fallback: compare with origin/main
+                  try {
+                    git fetch origin main 2>$null
+                    $changedFiles = git diff --name-only origin/main HEAD
+                    Write-Host "Compared with origin/main"
+                  } catch {
+                    Write-Host "All detection methods failed."
+                  }
                 }
 
-                if (-not $changedFiles) {
+                if ($changedFiles) {
+                  # Filter for only test files
+                  $testFiles = $changedFiles | Where-Object { $_ -match '\.spec\.(ts|js)$' }
+
+                  if ($testFiles) {
+                    $fileList = ($testFiles -join ' ')
+                    Write-Host "Changed test files found:"
+                    Write-Host $fileList
+                    Write-Host "##vso[task.setvariable variable=TEST_FILES]$fileList"
+                    Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]true"
+                  } else {
+                    Write-Host "Files were changed but none are test files."
+                    Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]false"
+                  }
+                } else {
                   Write-Host "Could not detect changes. Falling back to run all tests."
-                  Write-Host "##vso[task.setvariable variable=TEST_FILES]"
                   Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]fallback"
-                  exit 0
-                }
-
-                # Filter for only .spec.ts and .spec.js test files
-                $testFiles = $changedFiles | Where-Object { $_ -match '\.spec\.(ts|js)$' }
-
-                if ($testFiles) {
-                  $fileList = ($testFiles -join ' ')
-                  Write-Host "Changed test files found:"
-                  Write-Host $fileList
-                  Write-Host "##vso[task.setvariable variable=TEST_FILES]$fileList"
-                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]true"
-                } else {
-                  Write-Host "No test files were changed in this push."
-                  Write-Host "##vso[task.setvariable variable=HAS_TEST_CHANGES]false"
                 }
               displayName: 'Detect changed test files'
 
