@@ -154,7 +154,7 @@ stages:
 
           # ---- SUITE MODE: Run by folder ----
           - ${{ if eq(parameters.runMode, 'suite') }}:
-            - script: npx playwright test tests\${{ parameters.testSuite }}
+            - script: npx playwright test ${{ parameters.testSuite }}
               displayName: 'Run ${{ parameters.testSuite }} suite'
               continueOnError: true
               env:
